@@ -1,0 +1,15 @@
+[Unit]
+Description=JARVIS core - cervello (FastAPI + Claude) e dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/JARVIS/core
+EnvironmentFile=%h/JARVIS/core/cred
+ExecStart=%h/JARVIS/core/venv/bin/python -u %h/JARVIS/core/main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

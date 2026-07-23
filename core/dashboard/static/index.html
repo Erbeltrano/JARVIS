@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>JARVIS — dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0b0f14;
+    color: #d7e6ff;
+    margin: 0;
+    padding: 2rem;
+  }
+  h1 { color: #4fc3f7; letter-spacing: 0.05em; }
+  #status { margin-bottom: 1.5rem; font-size: 0.95rem; color: #8fa5c0; }
+  #status.ok::before { content: "● "; color: #4caf50; }
+  #status.down::before { content: "● "; color: #e53935; }
+  .entry {
+    background: #121a24;
+    border: 1px solid #1e2b3a;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .entry .user { color: #4fc3f7; font-weight: 600; }
+  .entry .jarvis { color: #d7e6ff; margin-top: 0.35rem; }
+</style>
+</head>
+<body>
+  <h1>JARVIS</h1>
+  <div id="status">Controllo stato core in corso...</div>
+  <div id="log"></div>
+
+  <script>
+    async function refresh() {
+      const statusEl = document.getElementById("status");
+      try {
+        const health = await fetch("/health").then(r => r.json());
+        statusEl.textContent = "Core online (" + health.status + ")";
+        statusEl.className = "ok";
+      } catch (e) {
+        statusEl.textContent = "Core irraggiungibile";
+        statusEl.className = "down";
+      }
+
+      try {
+        const log = await fetch("/api/log").then(r => r.json());
+        const logEl = document.getElementById("log");
+        logEl.replaceChildren(...log.slice().reverse().map(entry => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "entry";
+
+          const userLine = document.createElement("div");
+          userLine.className = "user";
+          userLine.textContent = "Tu: " + entry.user;
+
+          const jarvisLine = document.createElement("div");
+          jarvisLine.className = "jarvis";
+          jarvisLine.textContent = "JARVIS: " + entry.jarvis;
+
+          wrapper.append(userLine, jarvisLine);
+          return wrapper;
+        }));
+      } catch (e) {
+        // core irraggiungibile, gia' segnalato sopra
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

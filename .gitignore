@@ -1,0 +1,9 @@
+cred
+core/cred
+client/cred
+venv/
+core/venv/
+client/venv/
+__pycache__/
+*.pyc
+.DS_Store
