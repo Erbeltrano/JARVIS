@@ -146,14 +146,25 @@ Il riconoscimento usa il `GestureRecognizer` della [Tasks API di MediaPipe](http
 
 | Gesto | Azione |
 |---|---|
-| Mano aperta (`Open_Palm`) | Play/pause |
-| Pollice su / giù (`Thumb_Up` / `Thumb_Down`) | Volume su / giù |
-| Pugno chiuso (`Closed_Fist`) | Mute |
-| Swipe orizzontale della mano (calcolato dalla posizione del polso, non dal modello) | Cambia vista sulla dashboard |
+| Pollice su (`Thumb_Up`) | Accende la luce (`HA_LIGHT_ENTITY_ID`, via Home Assistant) |
+| Pugno chiuso (`Closed_Fist`) | Spegne la luce (`HA_LIGHT_ENTITY_ID`, via Home Assistant) |
+| Mano aperta (`Open_Palm`) | Loggato, non ancora collegato ad un'azione |
+| Pollice giù (`Thumb_Down`) | Loggato, non ancora collegato ad un'azione |
+| Swipe orizzontale della mano (calcolato dalla posizione del polso, non dal modello) | Loggato, non ancora collegato ad un'azione |
 
-Verificato dal vivo con la webcam del MacBook: `open_palm` e `thumbs_up` riconosciuti correttamente.
+Verificato dal vivo con la webcam del MacBook: pollice su/giù accende/spegne davvero la luce configurata in Home Assistant (vedi `client/home_assistant.py`).
 
-In questa v1 i gesti vengono solo riconosciuti e loggati (`[gesto] nome_gesto` in console): collegarli ad azioni reali (tasti multimediali, API della dashboard) è un prossimo passo, vedi `docs/ROADMAP.md`.
+## Integrazione Home Assistant
+
+`client/home_assistant.py` parla con l'API REST di Home Assistant (`turn_on_light` / `turn_off_light` / `toggle_light`, tramite `POST /api/services/light/...`). Configurazione in `client/cred`:
+
+```bash
+export HA_URL="https://il-tuo-homeassistant.example"
+export HA_TOKEN="il_tuo_long_lived_access_token"   # Profilo utente HA → Long-Lived Access Tokens
+export HA_LIGHT_ENTITY_ID="light.nome_entita"
+```
+
+Questa parte **non richiede la chiave Anthropic**: funziona in modo completamente indipendente dal `core`/Claude, quindi è testabile anche senza aver configurato il cervello.
 
 ## Tool disponibili a Claude (v1)
 

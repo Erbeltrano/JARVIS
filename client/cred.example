@@ -1,1 +1,4 @@
 export JARVIS_CORE_URL="ws://<ip-minipc>:8080/ws"
+export HA_URL="https://il-tuo-homeassistant.example"
+export HA_TOKEN="il_tuo_long_lived_access_token"
+export HA_LIGHT_ENTITY_ID="light.nome_entita"

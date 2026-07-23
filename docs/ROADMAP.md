@@ -16,7 +16,8 @@
 
 ## Fase 3 — domotica reale (Home Assistant)
 
-- Integrare Home Assistant come tool aggiuntivo in `core/tools.py`, per dare a Claude la possibilità di accendere/spegnere luci, prese, leggere sensori.
+- ✅ **Fatto (v0.2.0), in anticipo**: `client/home_assistant.py` collega direttamente i gesti a una luce reale via API REST di Home Assistant (pollice su = accendi, pugno chiuso = spegni). Indipendente da Claude/core: passa solo per il client.
+- **Ancora da fare**: integrare Home Assistant come tool in `core/tools.py`, per dare a Claude la possibilità di controllare luci/prese/sensori **via voce** (oggi solo i gesti sono collegati), e per gestire più dispositivi oltre alla singola luce di test.
 - **Feature "spatial pointing"** (richiesta esplicitamente): puntando con la mano/il dito verso un punto della stanza tramite la webcam, JARVIS deve capire a quale luce/dispositivo fisico ci si riferisce e attivarlo di conseguenza — senza doverlo nominare a voce. Serve:
   - Calibrazione della posizione dei dispositivi controllabili rispetto all'inquadratura della webcam (mappatura spaziale).
   - Estensione di `gestures/gesture_control.py` per stimare la direzione di puntamento (non solo il gesto statico).

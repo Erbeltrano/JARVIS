@@ -1,5 +1,6 @@
 sounddevice
 numpy
+requests
 openwakeword
 faster-whisper
 edge-tts

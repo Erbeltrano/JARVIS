@@ -18,6 +18,7 @@ Gesti mappati in questa v1:
 Il riconoscimento e' separato dall'azione: ogni gesto confermato invoca una
 callback, e' il chiamante (client.py) a decidere cosa fare davvero.
 """
+import platform
 import time
 import urllib.request
 from collections import deque
@@ -51,18 +52,40 @@ def _ensure_model() -> None:
         urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
 
 
+def _detect_builtin_camera_index(default: int = 0) -> int:
+    """Su macOS, se un iPhone vicino ha Continuity Camera attiva, l'indice 0
+    puo' puntare alla fotocamera dell'iPhone invece che a quella del Mac.
+    Qui si usa AVFoundation per trovare l'indice della camera integrata
+    (quella il cui nome non contiene "iPhone"), che OpenCV rispetta con lo
+    stesso ordine. Se qualcosa va storto (piattaforma diversa, pyobjc assente,
+    nessuna corrispondenza) si torna semplicemente all'indice di default.
+    """
+    if platform.system() != "Darwin":
+        return default
+    try:
+        import AVFoundation
+
+        devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+        for index, device in enumerate(devices):
+            if "iphone" not in device.localizedName().lower():
+                return index
+    except Exception:
+        pass
+    return default
+
+
 class GestureController:
     def __init__(
         self,
         on_gesture: Callable[[str], None],
-        camera_index: int = 0,
+        camera_index: Optional[int] = None,
         hold_frames: int = 5,
         cooldown_seconds: float = 1.5,
         min_score: float = 0.6,
     ):
         _ensure_model()
         self.on_gesture = on_gesture
-        self.camera_index = camera_index
+        self.camera_index = camera_index if camera_index is not None else _detect_builtin_camera_index()
         self.hold_frames = hold_frames
         self.cooldown_seconds = cooldown_seconds
         self.min_score = min_score

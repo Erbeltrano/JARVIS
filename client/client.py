@@ -18,6 +18,7 @@ import threading
 import websockets.sync.client as ws_client
 
 from gestures.gesture_control import GestureController
+from home_assistant import turn_off_light, turn_on_light
 from voice.stt import SpeechToText
 from voice.tts import speak
 from voice.wake_word import WakeWordListener
@@ -29,6 +30,8 @@ if not CORE_URL:
         "Crea un file 'cred' (vedi cred.example) e fai 'source cred' prima di avviare il client."
     )
 
+HA_LIGHT_ENTITY_ID = os.environ.get("HA_LIGHT_ENTITY_ID", "light.luce_camera_1")
+
 
 def ask_core(text: str) -> str:
     with ws_client.connect(CORE_URL) as connection:
@@ -37,9 +40,15 @@ def ask_core(text: str) -> str:
 
 
 def handle_gesture(gesture: str) -> None:
-    # v1: solo log. In futuro: tasti multimediali reali o chiamate
-    # all'API della dashboard per cambiare vista.
     print(f"[gesto] {gesture}")
+    if gesture == "thumbs_up":
+        print(f"Pollice su rilevato: accendo {HA_LIGHT_ENTITY_ID}")
+        turn_on_light(HA_LIGHT_ENTITY_ID)
+    elif gesture == "fist":
+        print(f"Pugno chiuso rilevato: spengo {HA_LIGHT_ENTITY_ID}")
+        turn_off_light(HA_LIGHT_ENTITY_ID)
+    # altri gesti: solo log per ora. In futuro: tasti multimediali reali o
+    # chiamate all'API della dashboard per cambiare vista.
 
 
 def voice_loop() -> None:
