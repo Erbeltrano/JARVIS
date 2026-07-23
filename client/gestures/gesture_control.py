@@ -1,53 +1,54 @@
 #!/usr/bin/env python3
 """Riconoscimento gesti dalla webcam per il controllo di media/dashboard.
 
-Gesti riconosciuti in questa v1:
-- mano aperta (5 dita alzate)  -> play/pause
-- pollice su / pollice giu'    -> volume su / volume giu'
-- pugno chiuso                 -> mute
-- swipe orizzontale della mano -> cambia vista sulla dashboard
+Usa il `GestureRecognizer` della Tasks API di MediaPipe con il modello
+pre-addestrato di Google: riconosce gia' "Open_Palm", "Closed_Fist",
+"Thumb_Up", "Thumb_Down" (tra gli altri) senza bisogno di addestrare nulla.
+Il modello (~8MB) viene scaricato automaticamente in questa cartella al
+primo avvio.
 
-Il riconoscimento vero e proprio (MediaPipe Hands) e' separato dall'azione:
-ogni gesto confermato invoca una callback, e' il chiamante (client.py) a
-decidere cosa fare davvero (tasti multimediali, chiamata all'API della
-dashboard, ecc).
+Gesti mappati in questa v1:
+- Open_Palm   -> play/pause
+- Thumb_Up    -> volume su
+- Thumb_Down  -> volume giu'
+- Closed_Fist -> mute
+- swipe orizzontale della mano (calcolato dalla posizione del polso, non dal
+  modello di gesti) -> cambia vista sulla dashboard
+
+Il riconoscimento e' separato dall'azione: ogni gesto confermato invoca una
+callback, e' il chiamante (client.py) a decidere cosa fare davvero.
 """
 import time
+import urllib.request
 from collections import deque
+from pathlib import Path
 from typing import Callable, Optional
 
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision
 
-mp_hands = mp.solutions.hands
-
-FINGER_TIPS = [4, 8, 12, 16, 20]
-FINGER_PIPS = [3, 6, 10, 14, 18]
+MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/"
+    "gesture_recognizer/float16/latest/gesture_recognizer.task"
+)
+MODEL_PATH = Path(__file__).parent / "gesture_recognizer.task"
 
 SWIPE_THRESHOLD = 0.08  # variazione minima di x (normalizzata) tra due frame
 
+GESTURE_NAMES = {
+    "Open_Palm": "open_palm",
+    "Closed_Fist": "fist",
+    "Thumb_Up": "thumbs_up",
+    "Thumb_Down": "thumbs_down",
+}
 
-def _fingers_up(landmarks) -> list:
-    """Una entry per dito (pollice, indice, medio, anulare, mignolo)."""
-    fingers = [landmarks[4].x < landmarks[3].x]  # il pollice si muove sull'asse x
-    for tip, pip in zip(FINGER_TIPS[1:], FINGER_PIPS[1:]):
-        fingers.append(landmarks[tip].y < landmarks[pip].y)
-    return fingers
 
-
-def _classify_gesture(landmarks) -> Optional[str]:
-    fingers = _fingers_up(landmarks)
-    total_up = sum(fingers)
-
-    if total_up == 5:
-        return "open_palm"
-    if total_up == 0:
-        return "fist"
-    if fingers[0] and total_up == 1:
-        wrist_y = landmarks[0].y
-        thumb_tip_y = landmarks[4].y
-        return "thumbs_up" if thumb_tip_y < wrist_y else "thumbs_down"
-    return None
+def _ensure_model() -> None:
+    if not MODEL_PATH.exists():
+        print("Scarico il modello di riconoscimento gesti (~8MB, una tantum)...")
+        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
 
 
 class GestureController:
@@ -57,14 +58,25 @@ class GestureController:
         camera_index: int = 0,
         hold_frames: int = 5,
         cooldown_seconds: float = 1.5,
+        min_score: float = 0.6,
     ):
+        _ensure_model()
         self.on_gesture = on_gesture
         self.camera_index = camera_index
         self.hold_frames = hold_frames
         self.cooldown_seconds = cooldown_seconds
+        self.min_score = min_score
         self._recent: deque = deque(maxlen=hold_frames)
         self._last_trigger_at = 0.0
         self._last_wrist_x: Optional[float] = None
+
+        base_options = mp_python.BaseOptions(model_asset_path=str(MODEL_PATH))
+        options = vision.GestureRecognizerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.VIDEO,
+            num_hands=1,
+        )
+        self.recognizer = vision.GestureRecognizer.create_from_options(options)
 
     def _maybe_trigger(self, gesture: Optional[str]) -> None:
         now = time.monotonic()
@@ -80,50 +92,60 @@ class GestureController:
         """Loop bloccante: apre la webcam e riconosce i gesti finche' non premi 'q'
         (con preview attiva) o il processo viene interrotto."""
         cap = cv2.VideoCapture(self.camera_index)
+        start_time = time.monotonic()
+        consecutive_failures = 0
+        max_consecutive_failures = 60  # tollera ~2s di frame falliti (webcam in "warm-up")
         try:
-            with mp_hands.Hands(
-                max_num_hands=1, min_detection_confidence=0.6, min_tracking_confidence=0.5
-            ) as hands:
-                while True:
-                    ok, frame = cap.read()
-                    if not ok:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        print("Impossibile leggere dalla webcam, esco.")
                         break
-                    frame = cv2.flip(frame, 1)
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = hands.process(rgb)
+                    time.sleep(0.03)
+                    continue
+                consecutive_failures = 0
+                frame = cv2.flip(frame, 1)
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                timestamp_ms = int((time.monotonic() - start_time) * 1000)
+                result = self.recognizer.recognize_for_video(mp_image, timestamp_ms)
 
-                    gesture = None
-                    if results.multi_hand_landmarks:
-                        hand_landmarks = results.multi_hand_landmarks[0]
-                        landmarks = hand_landmarks.landmark
-                        gesture = _classify_gesture(landmarks)
+                gesture = None
+                if result.gestures and result.gestures[0]:
+                    top = result.gestures[0][0]
+                    if top.category_name in GESTURE_NAMES and top.score >= self.min_score:
+                        gesture = GESTURE_NAMES[top.category_name]
 
-                        wrist_x = landmarks[0].x
-                        if self._last_wrist_x is not None:
-                            delta = wrist_x - self._last_wrist_x
-                            if delta > SWIPE_THRESHOLD:
-                                gesture = "swipe_right"
-                            elif delta < -SWIPE_THRESHOLD:
-                                gesture = "swipe_left"
-                        self._last_wrist_x = wrist_x
-
-                        if show_preview:
-                            mp.solutions.drawing_utils.draw_landmarks(
-                                frame, hand_landmarks, mp_hands.HAND_CONNECTIONS
-                            )
-                    else:
-                        self._last_wrist_x = None
-
-                    self._maybe_trigger(gesture)
+                if result.hand_landmarks:
+                    hand = result.hand_landmarks[0]
+                    wrist_x = hand[0].x
+                    if self._last_wrist_x is not None:
+                        delta = wrist_x - self._last_wrist_x
+                        if delta > SWIPE_THRESHOLD:
+                            gesture = "swipe_right"
+                        elif delta < -SWIPE_THRESHOLD:
+                            gesture = "swipe_left"
+                    self._last_wrist_x = wrist_x
 
                     if show_preview:
-                        cv2.putText(
-                            frame, gesture or "", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
-                        )
-                        cv2.imshow("JARVIS - gesti", frame)
-                        if cv2.waitKey(1) & 0xFF == ord("q"):
-                            break
+                        h, w = frame.shape[:2]
+                        for landmark in hand:
+                            cv2.circle(frame, (int(landmark.x * w), int(landmark.y * h)), 3, (0, 255, 0), -1)
+                else:
+                    self._last_wrist_x = None
+
+                self._maybe_trigger(gesture)
+
+                if show_preview:
+                    cv2.putText(
+                        frame, gesture or "", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
+                    )
+                    cv2.imshow("JARVIS - gesti", frame)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
         finally:
             cap.release()
             if show_preview:

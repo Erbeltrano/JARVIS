@@ -7,3 +7,4 @@ client/venv/
 __pycache__/
 *.pyc
 .DS_Store
+client/gestures/*.task

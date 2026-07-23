@@ -134,16 +134,24 @@ source cred
 python client.py
 ```
 
-Al primo avvio openWakeWord scarica in automatico i modelli pre-addestrati (serve internet una volta sola). Di' **"hey jarvis"**, aspetta il messaggio "ti ascolto...", poi fai la tua domanda. In parallelo si apre la finestra della webcam con il riconoscimento gesti (premi `q` per chiuderla).
+Al primo avvio openWakeWord e il riconoscimento gesti scaricano in automatico i rispettivi modelli pre-addestrati (serve internet una volta sola, ~8MB per i gesti). Di' **"hey jarvis"**, aspetta il messaggio "ti ascolto...", poi fai la tua domanda. In parallelo si apre la finestra della webcam con il riconoscimento gesti (premi `q` per chiuderla).
+
+Su macOS, al primo avvio va concesso il permesso Fotocamera all'app che ospita il terminale (es. Terminal/iTerm/VS Code) in **Impostazioni di Sistema → Privacy e sicurezza → Fotocamera**, altrimenti OpenCV non riesce ad aprire la webcam.
+
+> Se hai un iPhone vicino e sbloccato con Continuity Camera attiva, macOS potrebbe usare quello al posto della webcam integrata del Mac. Se succede, allontana/blocca l'iPhone e rilancia lo script: `client/gestures/gesture_control.py` apre semplicemente l'indice `0`, che macOS assegna dinamicamente a qualsiasi fotocamera consideri "primaria" in quel momento.
 
 ## Gesti riconosciuti (v1)
 
+Il riconoscimento usa il `GestureRecognizer` della [Tasks API di MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer) (il modello pre-addestrato di Google, scaricato in automatico in `client/gestures/gesture_recognizer.task`, non versionato): niente da addestrare per i gesti statici.
+
 | Gesto | Azione |
 |---|---|
-| Mano aperta (5 dita) | Play/pause |
-| Pollice su / giù | Volume su / giù |
-| Pugno chiuso | Mute |
-| Swipe orizzontale della mano | Cambia vista sulla dashboard |
+| Mano aperta (`Open_Palm`) | Play/pause |
+| Pollice su / giù (`Thumb_Up` / `Thumb_Down`) | Volume su / giù |
+| Pugno chiuso (`Closed_Fist`) | Mute |
+| Swipe orizzontale della mano (calcolato dalla posizione del polso, non dal modello) | Cambia vista sulla dashboard |
+
+Verificato dal vivo con la webcam del MacBook: `open_palm` e `thumbs_up` riconosciuti correttamente.
 
 In questa v1 i gesti vengono solo riconosciuti e loggati (`[gesto] nome_gesto` in console): collegarli ad azioni reali (tasti multimediali, API della dashboard) è un prossimo passo, vedi `docs/ROADMAP.md`.
 
